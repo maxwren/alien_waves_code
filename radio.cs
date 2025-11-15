@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEditor.VersionControl;
 using UnityEngine;
@@ -14,12 +15,19 @@ public class radio : MonoBehaviour
     private string key;
     private string encrypted_message;
     private bool is_message_complete;
+    private int repeated_letters_amount;
     private List<string> alphabet = new List<string>();
     private List<string> alphabet_shifted = new List<string>();
     private List<string> letters_encrypted = new List<string>();
     private List<string> alphabet_trimmed = new List<string>();
 
+    private TextMeshProUGUI original_text;
+    private Color original_color;
+
     private Dictionary<string, string> alphabet_encrypted = new Dictionary<string, string>();
+    private Dictionary<string, int> key_checks = new Dictionary<string, int>();
+    private Dictionary<string, int> same_letter_count = new Dictionary<string, int>();
+    private string key_letters_used;
     private void Awake()
     {
         //Adding alphabet manually because idk how to do it automatically
@@ -37,6 +45,18 @@ public class radio : MonoBehaviour
             alphabet_trimmed.Add(alphabet[i]);
             alphabet_encrypted.Add(alphabet[i], alphabet[i]);
         }
+
+        key_checks.Add("no_numbers", 1);
+        key_checks.Add("no_repeating_letters", 1);
+        same_letter_count.Clear();
+    }
+    private void Start()
+    {
+        player_key.onValueChanged.AddListener(delegate { Invoke(nameof(check_key), 0.1f); });
+        //invoke because otherwise the text isn't updated by the time the function is called
+
+        original_text = player_key.transform.Find("Text Area").Find("Text").GetComponent<TextMeshProUGUI>();
+        original_color = original_text.color;
     }
     public void get_text(InputAction.CallbackContext context)
     {
@@ -44,6 +64,75 @@ public class radio : MonoBehaviour
         {
             encrypt_message();
         }
+    }
+    public void check_key()
+    {
+        GameObject text_holder = player_key.transform.Find("Text Area").gameObject;
+        TextMeshProUGUI typed_text = text_holder.transform.Find("Text").GetComponent<TextMeshProUGUI>();
+        key_letters_used = typed_text.text;
+        same_letter_count.Clear();
+        repeated_letters_amount = 0;
+
+        for (int i = 0; i < key_letters_used.Length; i++)
+        {
+            for (int j = 0; j < key_letters_used.Length; j++)
+            {
+                if (key_letters_used[i] == key_letters_used[j])
+                {
+                    if (same_letter_count.ContainsKey(key_letters_used[j].ToString()))
+                    {
+                        same_letter_count[key_letters_used[j].ToString()] += 1;
+                    }
+                    else
+                    {
+                        same_letter_count.Add(key_letters_used[j].ToString(), 1);
+                    }
+                }
+            }
+        }
+
+        foreach (KeyValuePair<string, int> letter in same_letter_count)
+        {
+            if (letter.Value > 1)
+            {
+                repeated_letters_amount++;
+                key_checks["no_repeating_letters"] = 0;
+                Debug.Log("Repeating letters detected.");
+            }
+        }
+
+        if (repeated_letters_amount == 0)
+        {
+            key_checks["no_repeating_letters"] = 1;
+            Debug.Log("No repeating letters.");
+        }
+
+        if (player_key.text.Any(char.IsDigit))
+        {
+            key_checks["no_numbers"] = 0;
+        }
+        else
+        {
+            key_checks["no_numbers"] = 1;
+        }
+
+        if (key_checks.ContainsValue(0))
+        {
+            decline_key(typed_text);
+        }
+        else
+        {
+            allow_key(typed_text);
+        }
+        
+    }
+    private void decline_key(TextMeshProUGUI text)
+    {
+        text.color = Color.red;
+    }
+    private void allow_key(TextMeshProUGUI text)
+    {
+        text.color = original_color;
     }
     public void set_message_text()
     {
